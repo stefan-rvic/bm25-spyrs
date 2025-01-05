@@ -1,37 +1,67 @@
 import math
 from collections import Counter
 import numpy as np
-from scipy.sparse import csr_matrix
+from scipy.sparse import csc_matrix
+import re
 
 
-class Bm25Sparse:
-    def __init__(self, raw_corpus, tokenizer, k1=1.5, b=0.75, epsilon=0.25):
+def tokenize(text, stemmer=None, stopwords=None):
+    word_pattern = re.compile(r'\b\w+\b')
+
+    tokens = word_pattern.findall(text.lower())
+
+    if stopwords:
+        tokens = [t for t in tokens if t not in stopwords]
+
+    if stemmer:
+        tokens = [stemmer(token) for token in tokens]
+
+    return tokens
+
+class Bm25:
+    def __init__(self, tokenizer, k1=1.5, b=0.75, epsilon=0.25):
         self.k1 = k1
         self.b = b
         self.epsilon = epsilon
+
         self.tokenizer = tokenizer
-        self.raw_corpus = raw_corpus
-        self.corpus_size = len(raw_corpus)
 
-        self._prepare_corpus()
-        self._build_vocab()
-        self._calculate_doc_lengths()
-        self._calculate_idf()
+        self.corpus = []
+        self.corpus_frequencies = []
+        self.corpus_size = 0
 
-        self._build_sparse_matrix()
+        self.doc_id_to_idx = {}
+        self.idx_to_doc_id = {}
+        self.idx_to_term = {}
+        self.term_to_idx = {}
 
-    def _prepare_corpus(self):
-        self.corpus = [self.tokenizer(doc) for doc in self.raw_corpus]
-        self.corpus_frequencies = [Counter(terms) for terms in self.corpus]
+        self.docs_per_term = Counter()
+
+    def _prepare_corpus(self, corpus):
+        self.corpus_size = len(corpus)
+
+        for idx, doc in enumerate(corpus):
+            doc_id = doc.get('_id', idx)
+            self.doc_id_to_idx[doc_id] = idx
+            self.idx_to_doc_id[idx] = doc_id
+
+            # title = doc.get('title', '').strip()
+            text = doc.get('text', '').strip()
+            # full_text = f"{title} {text}".strip()
+
+            tokens = self.tokenizer(text)
+            count = Counter(tokens)
+
+            self.corpus_frequencies.append(count)
+            self.corpus.append(tokens)
+            self.docs_per_term.update(count.keys())
 
     def _build_vocab(self):
-        unique_terms = set()
-        for doc in self.corpus:
-            unique_terms.update(doc)
+        self.vocab_size = len(self.docs_per_term)
 
-        self.term_to_idx = {term: idx for idx, term in enumerate(sorted(unique_terms))}
-        self.idx_to_term = {idx: term for term, idx in self.term_to_idx.items()}
-        self.vocab_size = len(self.term_to_idx)
+        for idx, term in enumerate(self.docs_per_term.keys()):
+            self.term_to_idx[term] = idx
+            self.idx_to_term[idx] = term
 
     def _calculate_doc_lengths(self):
         self.doc_lengths = np.array([len(doc) for doc in self.corpus])
@@ -39,26 +69,13 @@ class Bm25Sparse:
 
     def _calculate_idf(self):
         self.idf = np.zeros(self.vocab_size)
-        docs_per_term = Counter()
 
-        for doc_freq in self.corpus_frequencies:
-            docs_per_term.update(doc_freq.keys())
-
-        total_idf = 0.0
-        terms_with_negative_idf = []
-
-        for term, freq in docs_per_term.items():
+        for term, freq in self.docs_per_term.items():
             term_idx = self.term_to_idx[term]
-            term_idf = math.log(self.corpus_size - freq + 0.5) - math.log(freq + 0.5)
-            self.idf[term_idx] = term_idf
-            total_idf += term_idf
+            self.idf[term_idx] = math.log(self.corpus_size) - math.log(freq)
 
-            if term_idf < 0:
-                terms_with_negative_idf.append(term_idx)
-
-        eps = self.epsilon * (total_idf / self.vocab_size)
-        for term_idx in terms_with_negative_idf:
-            self.idf[term_idx] = eps
+    def _release_memory(self):
+        self.docs_per_term = None
 
     def _build_sparse_matrix(self):
         rows = []
@@ -71,7 +88,6 @@ class Bm25Sparse:
 
             for term, freq in doc_freq.items():
                 term_idx = self.term_to_idx[term]
-
                 numerator = freq * (self.k1 + 1)
                 denominator = freq + self.k1 * len_norm
                 score = numerator / denominator
@@ -80,10 +96,22 @@ class Bm25Sparse:
                 cols.append(term_idx)
                 data.append(score)
 
-        self.score_matrix = csr_matrix(
+        self.score_matrix = csc_matrix(
             (data, (rows, cols)),
             shape=(self.corpus_size, self.vocab_size)
         )
+
+        self.data = self.score_matrix.data
+        self.indices = self.score_matrix.indices
+        self.indptr = self.score_matrix.indptr
+
+    def index(self, corpus):
+        self._prepare_corpus(corpus)
+        self._build_vocab()
+        self._calculate_doc_lengths()
+        self._calculate_idf()
+        self._release_memory()
+        self._build_sparse_matrix()
 
     def top_n(self, query, n=5):
         query_terms = self.tokenizer(query)
@@ -93,29 +121,46 @@ class Bm25Sparse:
         if not query_indices:
             return []
 
+        scores = np.zeros(self.corpus_size)
         query_idfs = self.idf[query_indices]
 
-        scores = self.score_matrix[:, query_indices].multiply(query_idfs).sum(axis=1).A1
+        for idx, term_idx in enumerate(query_indices):
+            start = self.indptr[term_idx]
+            end = self.indptr[term_idx + 1]
+            term_scores = self.data[start:end] * query_idfs[idx]
+            term_indices = self.indices[start:end]
+            np.add.at(scores, term_indices, term_scores)
 
         top_indices = np.argsort(scores)[::-1][:n]
-        return list(zip(top_indices, scores[top_indices]))
+        results = [(self.idx_to_doc_id[idx], scores[idx]) for idx in top_indices]
+        return results
 
 
 if __name__ == "__main__":
-    corpus = [
-        "hello world",
-        "hello python",
-        "python world",
-        "machine learning world",
-        "deep learning python"
+    beir_corpus = [
+        {'_id': 1, 'title': "hw", 'text': "hello world"},
+        {'_id': 2, 'title': "hp", 'text': "hello python"},
+        {'_id': 3, 'title': "pw", 'text': "python world"},
+        {'_id': 4, 'title': "mlw", 'text': "machine learning world"},
+        {'_id': 5, 'title': "dlp", 'text': "deep learning python"},
     ]
 
+    from nltk.stem import SnowballStemmer
+    from nltk.corpus import stopwords
 
-    def simple_tokenizer(text):
-        return text.lower().split()
+    import nltk
 
+    try:
+        stop_words = set(stopwords.words('english'))
+    except LookupError:
+        nltk.download('stopwords')
+        stop_words = set(stopwords.words('english'))
 
-    bm25 = Bm25Sparse(corpus, simple_tokenizer)
+    stemmer = SnowballStemmer("english")
+    tokenizer = lambda text : tokenize(text, lambda token: stemmer.stem(token), stop_words)
+
+    bm25 = Bm25(tokenizer=tokenizer)
+    bm25.index(beir_corpus)
     query = "python world"
     results = bm25.top_n(query)
     print(results)
