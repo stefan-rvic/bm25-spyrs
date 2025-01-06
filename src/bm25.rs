@@ -1,152 +1,195 @@
 use std::collections::HashMap;
+use sprs::{CsMat, TriMat};
+use ndarray::{Array1, s};
+use order_stat::kth_by;
+use crate::tokenizer::{Corpus, TokenizeOutput, Tokenizer, Vocab};
 
-type TermFrequency = HashMap<String, usize>;
-type InverseDocumentFrequency = HashMap<String, f64>;
+type DocFrequencies = HashMap<usize, usize>;
+type TermFrequencies = Vec<(Array1<usize>, Array1<f64>)>;
+type IdfArray = Array1<f64>;
 
-pub struct Bm25<F>
-where
-    F: Fn(&str) -> Vec<String>,
-{
-    corpus_size: usize,
-    raw_corpus: Vec<String>,
-    corpus: Vec<Vec<String>>,
+struct Frequencies {
+    doc_frequencies: DocFrequencies,
+    term_frequencies: TermFrequencies,
+}
 
-    corpus_frequencies: Vec<TermFrequency>,
-    corpus_lengths: Vec<usize>,
-    total_term_count: usize,
-    avg_doc_len: f64,
+struct MatrixParams {
+    rows: Array1<usize>,
+    cols: Array1<usize>,
+    scores: Array1<f64>,
+}
 
-    docs_per_term: TermFrequency,
-    idf: InverseDocumentFrequency,
+type SearchResult = Vec<(usize, f64)>;
 
-    tokenizer: F,
+pub struct Bm25 {
     k1: f64,
     b: f64,
-    epsilon: f64,
+    tokenizer: Tokenizer,
+    vocab: Vocab,
+    n_docs: usize,
+    score_matrix: CsMat<f64>,
 }
 
-#[derive(Debug)]
-pub struct SearchResult {
-    pub document_index: usize,
-    pub score: f64,
-}
-
-impl<F> Bm25<F>
-where
-    F: Fn(&str) -> Vec<String>,
-{
-    pub fn new(raw_corpus: Vec<String>, tokenizer: F, k1: f64, b: f64, epsilon: f64) -> Self {
-        let corpus_size = raw_corpus.len();
-        let mut bm25 = Self {
-            total_term_count: 0,
-            avg_doc_len: 0.0,
-            idf: InverseDocumentFrequency::new(),
-            raw_corpus,
-            tokenizer,
-            corpus_size,
-            corpus: Vec::with_capacity(corpus_size), // Pre-allocate capacity
-            corpus_frequencies: Vec::with_capacity(corpus_size),
-            corpus_lengths: Vec::with_capacity(corpus_size),
-            docs_per_term: TermFrequency::new(),
+impl Bm25 {
+    pub fn new(k1: f64, b: f64) -> Bm25 {
+        Self {
             k1,
             b,
-            epsilon,
-        };
-
-        bm25.prepare_corpus();
-        bm25.prepare_frequencies();
-        bm25.calculate_idf();
-        bm25
+            tokenizer: Tokenizer::new(),
+            vocab: Default::default(),
+            n_docs: 0,
+            score_matrix: CsMat::empty(sprs::CompressedStorage::CSC, 0),
+        }
     }
 
-    fn prepare_corpus(&mut self) {
-        self.corpus = self.raw_corpus
-            .iter()
-            .map(|doc| (self.tokenizer)(doc))
+    pub fn index(&mut self, texts: &[String]) {
+        let TokenizeOutput {corpus, vocab} =  self.tokenizer.perform(texts);
+        self.vocab = vocab;
+
+        let Frequencies { doc_frequencies, term_frequencies } = Bm25::compute_frequencies(&corpus);
+
+        let doc_lengths: Vec<f64> = corpus.iter().map(|doc| doc.len() as f64).collect();
+        let avg_doc_len = doc_lengths.iter().sum::<f64>() / doc_lengths.len() as f64;
+
+        self.n_docs = doc_lengths.len();
+        let n_terms = self.vocab.len();
+
+        let idf_array = Bm25::compute_idf_array(n_terms, self.n_docs, &doc_frequencies);
+
+        let MatrixParams { rows, cols, scores } = self.prepare_sparse_matrix(&idf_array, &doc_frequencies, &term_frequencies, &doc_lengths, &avg_doc_len);
+
+        self.score_matrix = TriMat::from_triplets(
+            (self.n_docs, n_terms),
+            rows.to_vec(),
+            cols.to_vec(),
+            scores.to_vec()
+        ).to_csc();
+    }
+
+    fn compute_frequencies(corpus: &Corpus) -> Frequencies {
+        let mut doc_frequencies: DocFrequencies = HashMap::new();
+        let mut term_frequencies: TermFrequencies = Vec::with_capacity(corpus.len());
+
+        for terms in corpus {
+            let term_count: HashMap<usize, usize> = terms
+                .iter()
+                .fold(
+                    HashMap::new(),
+                    |mut acc, &term| {
+                        *acc.entry(term).or_insert(0) += 1;
+                        acc
+                    }
+                );
+
+            for unique_term in term_count.keys().cloned(){
+                doc_frequencies.entry(unique_term).and_modify(|count| *count += 1).or_insert(1);
+            }
+
+
+            let (keys, values): (Vec<usize>, Vec<usize>) = term_count.iter().unzip();
+            term_frequencies.push(
+                (Array1::from_vec(keys), Array1::from_vec(values).mapv(|v| v as f64))
+            );
+        }
+
+        Frequencies { doc_frequencies, term_frequencies }
+    }
+
+    fn compute_idf_array(n_terms: usize, n_docs: usize, doc_frequencies: &DocFrequencies) -> IdfArray {
+        let mut idf = Array1::<f64>::zeros(n_terms);
+
+        let n_log = (n_docs as f64).ln();
+        for (term, freq) in doc_frequencies {
+            idf[*term] = n_log - (*freq as f64).ln();
+        }
+
+        idf
+    }
+
+    fn prepare_sparse_matrix(
+        &self,
+        idf_array: &IdfArray,
+        doc_frequencies: &DocFrequencies,
+        term_frequencies: &TermFrequencies,
+        doc_lengths: &Vec<f64>,
+        avg_doc_len: &f64) -> MatrixParams {
+
+        let size = doc_frequencies.values().sum::<usize>();
+
+        let mut rows = Array1::<usize>::zeros(size);
+        let mut cols = Array1::<usize>::zeros(size);
+        let mut scores = Array1::<f64>::zeros(size);
+
+        let mut step = 0;
+
+        for (i, (terms, tf_array)) in term_frequencies.iter().enumerate() {
+            let doc_length = doc_lengths[i];
+
+            let tfc = (tf_array * (self.k1 + 1.0)) / (tf_array + self.k1 * (1.0 - self.b + self.b * (doc_length as f64 / *avg_doc_len as f64)));
+            let idf = terms.iter().map(|&term| idf_array[term]);
+            let score: Array1<f64> = idf.zip(tfc.iter()).map(|(i, &t)| i * t) .collect();
+
+            let start = step;
+            let end = start + score.len();
+
+            rows.slice_mut(s![start..end]).fill(i);
+            cols.slice_mut(s![start..end]).assign(&terms);
+            scores.slice_mut(s![start..end]).assign(&score);
+
+            step = end;
+        }
+
+        MatrixParams { rows, cols, scores}
+    }
+
+    pub fn top_n(&self, query: &String, n: usize) -> SearchResult {
+        let tokenized_query = self.tokenizer.perform(&[query.to_string()]);
+
+        let query_indices:Vec<usize> = tokenized_query
+            .vocab.keys()
+            .filter_map(|term| self.vocab.get(term).cloned())
             .collect();
-    }
 
-    fn prepare_frequencies(&mut self) {
-        for terms in &self.corpus {
-            let length = terms.len();
-            self.corpus_lengths.push(length);
-            self.total_term_count += length;
-
-            let mut freq = TermFrequency::with_capacity(terms.len());
-            for term in terms {
-                *freq.entry(term.clone()).or_insert(0) += 1;
-                *self.docs_per_term.entry(term.clone()).or_insert(0) += 1;
-            }
-            self.corpus_frequencies.push(freq);
+        if query_indices.is_empty() {
+            return vec![];
         }
 
-        self.avg_doc_len = self.total_term_count as f64 / self.corpus_size as f64;
-    }
+        let mut scores = vec![0.0; self.n_docs];
 
-    fn calculate_idf(&mut self) {
-        let corpus_size_f64 = self.corpus_size as f64;
-        let total_terms_f64 = self.total_term_count as f64;
+        let raw_indptr = self.score_matrix.indptr().into_raw_storage();
+        for &i in &query_indices {
 
-        let mut total_idf = 0.0;
-        let mut terms_with_negative_idf = Vec::new();
+            let start = raw_indptr[i];
+            let end = raw_indptr[i + 1];
 
-        for (term, &freq) in &self.docs_per_term {
-            let freq_f64 = freq as f64;
-            let term_idf = (corpus_size_f64 - freq_f64 + 0.5).ln() - (freq_f64 + 0.5).ln();
+            let doc_indices = &self.score_matrix.indices()[start..end];
+            let term_scores = &self.score_matrix.data()[start..end];
 
-            self.idf.insert(term.clone(), term_idf);
-            total_idf += term_idf;
-
-            if term_idf < 0.0 {
-                terms_with_negative_idf.push(term.clone());
+            for (&doc_idx, &score) in doc_indices.iter().zip(term_scores.iter()) {
+                scores[doc_idx] += score;
             }
         }
 
-        let eps = self.epsilon * (total_idf / total_terms_f64);
-        for term in terms_with_negative_idf {
-            self.idf.insert(term, eps);
-        }
-    }
-
-    fn calculate_score(&self, query_term: &str, doc_lengths: &[f64]) -> Vec<f64> {
-        let idf = self.idf.get(query_term).copied().unwrap_or(0.0);
-        let mut scores = vec![0.0; self.corpus_size];
-
-        for (doc_idx, doc_freq) in self.corpus_frequencies.iter().enumerate() {
-            let freq = *doc_freq.get(query_term).unwrap_or(&0) as f64;
-            let len_norm = 1.0 - self.b + self.b * doc_lengths[doc_idx] / self.avg_doc_len;
-            scores[doc_idx] = idf * (freq * (self.k1 + 1.0) / (freq + self.k1 * len_norm));
-        }
-
-        scores
-    }
-
-    fn sum_scores(&self, query: &str) -> Vec<f64> {
-        let q_terms = (self.tokenizer)(query);
-        let doc_lengths: Vec<f64> = self.corpus_lengths.iter().map(|&x| x as f64).collect();
-
-        let mut scores = vec![0.0; self.corpus_size];
-        for term in q_terms {
-            let term_scores = self.calculate_score(&term, &doc_lengths);
-            for (idx, score) in term_scores.iter().enumerate() {
-                scores[idx] += score;
-            }
-        }
-        scores
-    }
-
-    pub fn top_n(&self, query: &str, n: usize) -> Vec<SearchResult> {
-        let scores = self.sum_scores(query);
-        let mut results: Vec<SearchResult> = scores
-            .into_iter()
+        let mut indexed_scores: Vec<(usize, f64)> = scores.into_iter()
             .enumerate()
-            .map(|(idx, score)| SearchResult { document_index: idx, score })
             .collect();
 
-        results.sort_unstable_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
-        results.truncate(n);
-        results
+        if n >= indexed_scores.len() {
+            indexed_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            return indexed_scores;
+        }
+
+        let nth = indexed_scores.len() - n;
+        kth_by(&mut indexed_scores, nth, |a, b| {
+            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        let mut top_n = indexed_scores[nth..].to_vec();
+        top_n.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        top_n
     }
+
 }
 
 #[cfg(test)]
@@ -154,24 +197,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_basic_search() {
+    fn test_bm25() {
         let corpus = vec![
-            "hello world".to_string(),
-            "hello python".to_string(),
-            "python world".to_string(),
-            "machine learning world".to_string(),
-            "deep learning python".to_string(),
+            "sustainable energy development in modern cities".to_string(),
+            "renewable energy systems transform cities today".to_string(),
+            "sustainable urban development transforms modern infrastructure".to_string(),
+            "future cities require sustainable planning approach".to_string(),
+            "energy consumption patterns in urban areas".to_string(),
         ];
 
-        let tokenizer = |text: &str| {
-            text.to_lowercase()
-                .split_whitespace()
-                .map(String::from)
-                .collect()
-        };
+        let mut bm25 = Bm25::new(1.5, 0.75);
+        bm25.index(&corpus);
+        let result = bm25.top_n(&"modern cities".to_string(), 5);
 
-        let bm25 = Bm25::new(corpus, tokenizer, 1.5, 0.75, 0.25);
-        let results = bm25.top_n("python world", 5);
-        println!("Top 5 results: {:?}", results);
+        println!("{:?}", result);
     }
 }

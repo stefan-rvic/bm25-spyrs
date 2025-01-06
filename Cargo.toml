@@ -8,3 +8,8 @@ name = "term_curator"
 path = "src/lib.rs"
 
 [dependencies]
+regex = "1.11.1"
+stop-words = "0.8.1"
+sprs = "0.11.2"
+ndarray = "0.16.1"
+order-stat = "0.1.3"
