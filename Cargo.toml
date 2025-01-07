@@ -1,13 +1,14 @@
 [package]
-name = "a-term-curator"
+name = "bm25spyrs"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "term_curator"
-path = "src/lib.rs"
+name = "bm25spyrs"
+crate-type = ["cdylib"]
 
 [dependencies]
+pyo3 = { version = "0.23.3", features = ["extension-module"] }
 regex = "1.11.1"
 stop-words = "0.8.1"
 sprs = "0.11.2"

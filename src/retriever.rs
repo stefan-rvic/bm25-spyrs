@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use sprs::{CsMat, TriMat};
 use ndarray::{Array1, s};
 use order_stat::kth_by;
+use pyo3::{pyclass, pymethods};
 use crate::tokenizer::{Corpus, TokenizeOutput, Tokenizer, Vocab};
 
 type DocFrequencies = HashMap<usize, usize>;
@@ -21,7 +22,8 @@ struct MatrixParams {
 
 type SearchResult = Vec<(usize, f64)>;
 
-pub struct Bm25 {
+#[pyclass]
+pub struct Retriever {
     k1: f64,
     b: f64,
     tokenizer: Tokenizer,
@@ -30,8 +32,10 @@ pub struct Bm25 {
     score_matrix: CsMat<f64>,
 }
 
-impl Bm25 {
-    pub fn new(k1: f64, b: f64) -> Bm25 {
+#[pymethods]
+impl Retriever {
+    #[new]
+    pub fn new(k1: f64, b: f64) -> Self {
         Self {
             k1,
             b,
@@ -42,11 +46,21 @@ impl Bm25 {
         }
     }
 
-    pub fn index(&mut self, texts: &[String]) {
+    pub fn index(&mut self, texts: Vec<String>) {
+        self.internal_index(&texts);
+    }
+
+    pub fn top_n(&self, query: String, n: usize) -> Vec<(usize, f64)> {
+        self.internal_top_n(&query, n)
+    }
+}
+
+impl Retriever {
+    fn internal_index(&mut self, texts: &[String]) {
         let TokenizeOutput {corpus, vocab} =  self.tokenizer.perform(texts);
         self.vocab = vocab;
 
-        let Frequencies { doc_frequencies, term_frequencies } = Bm25::compute_frequencies(&corpus);
+        let Frequencies { doc_frequencies, term_frequencies } = Retriever::compute_frequencies(&corpus);
 
         let doc_lengths: Vec<f64> = corpus.iter().map(|doc| doc.len() as f64).collect();
         let avg_doc_len = doc_lengths.iter().sum::<f64>() / doc_lengths.len() as f64;
@@ -54,7 +68,7 @@ impl Bm25 {
         self.n_docs = doc_lengths.len();
         let n_terms = self.vocab.len();
 
-        let idf_array = Bm25::compute_idf_array(n_terms, self.n_docs, &doc_frequencies);
+        let idf_array = Retriever::compute_idf_array(n_terms, self.n_docs, &doc_frequencies);
 
         let MatrixParams { rows, cols, scores } = self.prepare_sparse_matrix(&idf_array, &doc_frequencies, &term_frequencies, &doc_lengths, &avg_doc_len);
 
@@ -142,7 +156,7 @@ impl Bm25 {
         MatrixParams { rows, cols, scores}
     }
 
-    pub fn top_n(&self, query: &String, n: usize) -> SearchResult {
+    fn internal_top_n(&self, query: &String, n: usize) -> SearchResult {
         let tokenized_query = self.tokenizer.perform(&[query.to_string()]);
 
         let query_indices:Vec<usize> = tokenized_query
@@ -197,7 +211,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_bm25() {
+    fn test_retriever() {
         let corpus = vec![
             "sustainable energy development in modern cities".to_string(),
             "renewable energy systems transform cities today".to_string(),
@@ -206,9 +220,9 @@ mod tests {
             "energy consumption patterns in urban areas".to_string(),
         ];
 
-        let mut bm25 = Bm25::new(1.5, 0.75);
-        bm25.index(&corpus);
-        let result = bm25.top_n(&"modern cities".to_string(), 5);
+        let mut bm25 = Retriever::new(1.5, 0.75);
+        bm25.index(corpus);
+        let result = bm25.top_n("modern cities".to_string(), 5);
 
         println!("{:?}", result);
     }

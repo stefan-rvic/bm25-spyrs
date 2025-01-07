@@ -1,2 +1,46 @@
-/target
-.idea
+### Rust ###
+/target/
+Cargo.lock
+**/*.rs.bk
+
+### Python ###
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Python binary extensions
+*.pyd
+*.so
+*.dylib
+
+### JetBrains ###
+.idea/
+*.iml
+*.iws
+*.ipr
+.idea_modules/
+
+# CMake
+cmake-build-*/
+
+# JIRA plugin
+atlassian-ide-plugin.xml
+
+*.log
+.env
+.env.*
+
+# Virtual Environment
+venv/
+.venv/
+ENV/
+
+### Visual Studio Code ###
+.vscode/
+*.code-workspace
