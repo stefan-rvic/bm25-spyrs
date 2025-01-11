@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use sprs::{CsMat, TriMat};
-use ndarray::{Array1, s};
+use ndarray::{s, Array1};
 use order_stat::kth_by;
 use pyo3::{pyclass, pymethods};
 use crate::tokenizer::{Corpus, TokenizeOutput, Tokenizer, Vocab};
@@ -85,15 +85,10 @@ impl Retriever {
         let mut term_frequencies: TermFrequencies = Vec::with_capacity(corpus.len());
 
         for terms in corpus {
-            let term_count: HashMap<usize, usize> = terms
-                .iter()
-                .fold(
-                    HashMap::new(),
-                    |mut acc, &term| {
-                        *acc.entry(term).or_insert(0) += 1;
-                        acc
-                    }
-                );
+            let mut term_count = HashMap::with_capacity(terms.len());
+            for &term in terms {
+                *term_count.entry(term).or_insert(0) += 1;
+            }
 
             for unique_term in term_count.keys().cloned(){
                 doc_frequencies.entry(unique_term).and_modify(|count| *count += 1).or_insert(1);
@@ -157,10 +152,10 @@ impl Retriever {
     }
 
     fn internal_top_n(&self, query: &String, n: usize) -> SearchResult {
-        let tokenized_query = self.tokenizer.perform(&[query.to_string()]);
+        let tokenized_query = self.tokenizer.perform_simple(query);
 
         let query_indices:Vec<usize> = tokenized_query
-            .vocab.keys()
+            .iter()
             .filter_map(|term| self.vocab.get(term).cloned())
             .collect();
 
@@ -203,7 +198,6 @@ impl Retriever {
 
         top_n
     }
-
 }
 
 #[cfg(test)]
@@ -212,7 +206,9 @@ mod tests {
 
     #[test]
     fn test_retriever() {
-        let corpus = vec![
+        let mut retriever = Retriever::new(1.2, 0.75);  // Common BM25 parameters
+
+        let texts = vec![
             "sustainable energy development in modern cities".to_string(),
             "renewable energy systems transform cities today".to_string(),
             "sustainable urban development transforms modern infrastructure".to_string(),
@@ -220,10 +216,11 @@ mod tests {
             "energy consumption patterns in urban areas".to_string(),
         ];
 
-        let mut bm25 = Retriever::new(1.5, 0.75);
-        bm25.index(corpus);
-        let result = bm25.top_n("modern cities".to_string(), 5);
+        retriever.index(texts);
 
+        let result = retriever.top_n("modern cities".to_string(), 5);
         println!("{:?}", result);
+
+        // todo: correct tests
     }
 }
