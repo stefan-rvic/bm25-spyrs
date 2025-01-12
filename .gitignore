@@ -8,6 +8,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# benchmark
+beir_datasets
+
 # Distribution / packaging
 dist/
 build/

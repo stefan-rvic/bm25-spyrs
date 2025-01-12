@@ -50,7 +50,7 @@ impl Retriever {
         self.internal_index(&texts);
     }
 
-    pub fn top_n(&self, query: String, n: usize) -> Vec<(usize, f64)> {
+    pub fn top_n(&self, query: String, n: usize) -> SearchResult {
         self.internal_top_n(&query, n)
     }
 }
@@ -183,20 +183,13 @@ impl Retriever {
             .enumerate()
             .collect();
 
-        if n >= indexed_scores.len() {
-            indexed_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-            return indexed_scores;
-        }
 
-        let nth = indexed_scores.len() - n;
-        kth_by(&mut indexed_scores, nth, |a, b| {
-            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+        let k = n.min(self.n_docs);
+        kth_by(&mut indexed_scores, k - 1, |a, b| {
+            b.1.partial_cmp(&a.1).unwrap()
         });
 
-        let mut top_n = indexed_scores[nth..].to_vec();
-        top_n.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
-        top_n
+        indexed_scores[..k].to_vec()
     }
 }
 
@@ -218,7 +211,7 @@ mod tests {
 
         retriever.index(texts);
 
-        let result = retriever.top_n("modern cities".to_string(), 5);
+        let result = retriever.top_n("modern cities".to_string(), 3);
         println!("{:?}", result);
 
         // todo: correct tests
