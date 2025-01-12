@@ -3,6 +3,7 @@ use sprs::{CsMat, TriMat};
 use ndarray::{s, Array1};
 use order_stat::kth_by;
 use pyo3::{pyclass, pymethods};
+use rayon::prelude::*;
 use crate::tokenizer::{Corpus, TokenizeOutput, Tokenizer, Vocab};
 
 type DocFrequencies = HashMap<usize, usize>;
@@ -53,6 +54,13 @@ impl Retriever {
     pub fn top_n(&self, query: String, n: usize) -> SearchResult {
         self.internal_top_n(&query, n)
     }
+
+    pub fn top_n_batched(&mut self, queries: Vec<String>, n: usize) -> Vec<SearchResult> {
+        queries
+            .par_iter()
+            .map(|query| self.internal_top_n(&query, n))
+            .collect()
+    }
 }
 
 impl Retriever {
@@ -85,15 +93,14 @@ impl Retriever {
         let mut term_frequencies: TermFrequencies = Vec::with_capacity(corpus.len());
 
         for terms in corpus {
-            let mut term_count = HashMap::with_capacity(terms.len());
+            let mut term_count = HashMap::new();
             for &term in terms {
-                *term_count.entry(term).or_insert(0) += 1;
+                term_count.entry(term).and_modify(|count| *count += 1).or_insert(1);
             }
 
             for unique_term in term_count.keys().cloned(){
                 doc_frequencies.entry(unique_term).and_modify(|count| *count += 1).or_insert(1);
             }
-
 
             let (keys, values): (Vec<usize>, Vec<usize>) = term_count.iter().unzip();
             term_frequencies.push(
@@ -134,7 +141,7 @@ impl Retriever {
         for (i, (terms, tf_array)) in term_frequencies.iter().enumerate() {
             let doc_length = doc_lengths[i];
 
-            let tfc = (tf_array * (self.k1 + 1.0)) / (tf_array + self.k1 * (1.0 - self.b + self.b * (doc_length as f64 / *avg_doc_len as f64)));
+            let tfc = (tf_array * (self.k1 + 1.0)) / (tf_array + self.k1 * (1.0 - self.b + self.b * doc_length / *avg_doc_len));
             let idf = terms.iter().map(|&term| idf_array[term]);
             let score: Array1<f64> = idf.zip(tfc.iter()).map(|(i, &t)| i * t) .collect();
 

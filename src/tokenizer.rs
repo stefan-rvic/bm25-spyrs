@@ -22,13 +22,13 @@ impl Tokenizer {
         let stop_words: HashSet<_> = get(English).into_iter().collect();
 
         Self {
-            word_pattern: Regex::new(r"\b\w+\b").unwrap(),
+            word_pattern: Regex::new(r"(?u)\b\w\w+\b").unwrap(),
             stop_words,
             stemmer: Stemmer::create(Algorithm::English),
         }
     }
 
-    pub fn perform_simple(&self, text: &String) -> HashSet<String> {
+    pub fn perform_simple(&self, text: &String) -> Vec<String> {
         self.word_pattern
             .find_iter(&text.to_lowercase())
             .map(|token| token.as_str())
