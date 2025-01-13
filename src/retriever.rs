@@ -7,8 +7,8 @@ use rayon::prelude::*;
 use crate::tokenizer::{Corpus, TokenizeOutput, Tokenizer, Vocab};
 
 type DocFrequencies = HashMap<usize, usize>;
-type TermFrequencies = Vec<(Array1<usize>, Array1<f64>)>;
-type IdfArray = Array1<f64>;
+type TermFrequencies = Vec<(Array1<usize>, Array1<f32>)>;
+type IdfArray = Array1<f32>;
 
 struct Frequencies {
     doc_frequencies: DocFrequencies,
@@ -18,25 +18,25 @@ struct Frequencies {
 struct MatrixParams {
     rows: Array1<usize>,
     cols: Array1<usize>,
-    scores: Array1<f64>,
+    scores: Array1<f32>,
 }
 
-type SearchResult = Vec<(usize, f64)>;
+type SearchResult = Vec<(usize, f32)>;
 
 #[pyclass]
 pub struct Retriever {
-    k1: f64,
-    b: f64,
+    k1: f32,
+    b: f32,
     tokenizer: Tokenizer,
     vocab: Vocab,
     n_docs: usize,
-    score_matrix: CsMat<f64>,
+    score_matrix: CsMat<f32>,
 }
 
 #[pymethods]
 impl Retriever {
     #[new]
-    pub fn new(k1: f64, b: f64) -> Self {
+    pub fn new(k1: f32, b: f32) -> Self {
         Self {
             k1,
             b,
@@ -70,8 +70,8 @@ impl Retriever {
 
         let Frequencies { doc_frequencies, term_frequencies } = Retriever::compute_frequencies(&corpus);
 
-        let doc_lengths: Vec<f64> = corpus.iter().map(|doc| doc.len() as f64).collect();
-        let avg_doc_len = doc_lengths.iter().sum::<f64>() / (doc_lengths.len() as f64);
+        let doc_lengths: Vec<f32> = corpus.iter().map(|doc| doc.len() as f32).collect();
+        let avg_doc_len = doc_lengths.iter().sum::<f32>() / (doc_lengths.len() as f32);
 
         self.n_docs = doc_lengths.len();
         let n_terms = self.vocab.len();
@@ -104,7 +104,7 @@ impl Retriever {
 
             let (keys, values): (Vec<usize>, Vec<usize>) = term_count.iter().unzip();
             term_frequencies.push(
-                (Array1::from_vec(keys), Array1::from_vec(values).mapv(|v| v as f64))
+                (Array1::from_vec(keys), Array1::from_vec(values).mapv(|v| v as f32))
             );
         }
 
@@ -112,11 +112,11 @@ impl Retriever {
     }
 
     fn compute_idf_array(n_terms: usize, n_docs: usize, doc_frequencies: &DocFrequencies) -> IdfArray {
-        let mut idf = Array1::<f64>::zeros(n_terms);
+        let mut idf = Array1::<f32>::zeros(n_terms);
 
-        let n_log = (n_docs as f64).ln();
+        let n_log = (n_docs as f32).ln();
         for (term, freq) in doc_frequencies {
-            idf[*term] = n_log - (*freq as f64).ln();
+            idf[*term] = n_log - (*freq as f32).ln();
         }
 
         idf
@@ -127,14 +127,14 @@ impl Retriever {
         idf_array: &IdfArray,
         doc_frequencies: &DocFrequencies,
         term_frequencies: &TermFrequencies,
-        doc_lengths: &Vec<f64>,
-        avg_doc_len: &f64) -> MatrixParams {
+        doc_lengths: &Vec<f32>,
+        avg_doc_len: &f32) -> MatrixParams {
 
         let size = doc_frequencies.values().sum::<usize>();
 
         let mut rows = Array1::<usize>::zeros(size);
         let mut cols = Array1::<usize>::zeros(size);
-        let mut scores = Array1::<f64>::zeros(size);
+        let mut scores = Array1::<f32>::zeros(size);
 
         let mut step = 0;
 
@@ -143,7 +143,7 @@ impl Retriever {
 
             let tfc = (tf_array * (self.k1 + 1.0)) / (tf_array + self.k1 * (1.0 - self.b + self.b * doc_length / *avg_doc_len));
             let idf = terms.iter().map(|&term| idf_array[term]);
-            let score: Array1<f64> = idf.zip(tfc.iter()).map(|(i, &t)| i * t) .collect();
+            let score: Array1<f32> = idf.zip(tfc.iter()).map(|(i, &t)| i * t) .collect();
 
             let start = step;
             let end = start + score.len();
@@ -186,7 +186,7 @@ impl Retriever {
             }
         }
 
-        let mut indexed_scores: Vec<(usize, f64)> = scores.into_iter()
+        let mut indexed_scores: Vec<(usize, f32)> = scores.into_iter()
             .enumerate()
             .collect();
 
@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn test_retriever() {
-        let mut retriever = Retriever::new(1.2, 0.75);  // Common BM25 parameters
+        let mut retriever = Retriever::new(1.5, 0.75);
 
         let texts = vec![
             "sustainable energy development in modern cities".to_string(),

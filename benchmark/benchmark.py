@@ -6,7 +6,6 @@ import time
 import psutil
 from beir.datasets.data_loader import GenericDataLoader
 from beir.retrieval.evaluation import EvaluateRetrieval
-from sklearn.utils.validation import check_memory
 
 logging.basicConfig(
     level=logging.INFO,
@@ -72,7 +71,7 @@ class Benchmark:
             with open(filename, 'r') as file:
                 try:
                     data = json.load(file)
-                except json.JSONDecodeError:  # Handle empty or invalid file
+                except json.JSONDecodeError:
                     data = []
 
         data.append(self.result_tracker)
