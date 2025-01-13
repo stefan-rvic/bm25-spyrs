@@ -71,7 +71,7 @@ impl Retriever {
         let Frequencies { doc_frequencies, term_frequencies } = Retriever::compute_frequencies(&corpus);
 
         let doc_lengths: Vec<f64> = corpus.iter().map(|doc| doc.len() as f64).collect();
-        let avg_doc_len = doc_lengths.iter().sum::<f64>() / doc_lengths.len() as f64;
+        let avg_doc_len = doc_lengths.iter().sum::<f64>() / (doc_lengths.len() as f64);
 
         self.n_docs = doc_lengths.len();
         let n_terms = self.vocab.len();

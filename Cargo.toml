@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 [dependencies]
 pyo3 = { version = "0.23.3", features = ["extension-module"] }
 regex = "1.11.1"
-stop-words = "0.8.1"
+stopwords = "0.1.1"
 sprs = "0.11.2"
 ndarray = "0.16.1"
 order-stat = "0.1.3"

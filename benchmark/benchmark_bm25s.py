@@ -1,11 +1,11 @@
 import logging
 import time
-
 import bm25s
 
 import argparse
 
 from nltk import SnowballStemmer
+from nltk.corpus import stopwords
 
 from benchmark import Benchmark
 
@@ -15,17 +15,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+stopwords = stopwords.words('english')
 
 class BenchmarkBm25s(Benchmark):
     def __init__(self, dataset):
         super(BenchmarkBm25s, self).__init__(dataset)
+        self.result_tracker['model_name'] = 'BM25s'
         stemmer = SnowballStemmer("english")
         self.stemming = lambda texts: [stemmer.stem(text) for text in texts]
         self.model = bm25s.BM25(method='atire', backend='numpy')
 
     def indexing_method(self, texts):
-        corpus_tokens = bm25s.tokenize(texts, stemmer=self.stemming, allow_empty=False)
-        self.model.index(corpus_tokens)
+        corpus_tokens = bm25s.tokenize(texts, stemmer=self.stemming, stopwords=stopwords, allow_empty=False, show_progress=False)
+        self.model.index(corpus_tokens, show_progress=False)
 
     def scoring_method(self, queries, doc_ids, k):
         results = {}
@@ -39,30 +41,17 @@ class BenchmarkBm25s(Benchmark):
             batch_queries = queries[i:i + chunk_size]
 
             start_time = time.time()
-            tokenized_chunk = bm25s.tokenize(batch_queries, stemmer=self.stemming, allow_empty=False)
-            hits = self.model.retrieve(tokenized_chunk, k=k, n_threads=-1, chunksize=chunk_size)
+            tokenized_chunk = bm25s.tokenize(batch_queries, stemmer=self.stemming, stopwords=stopwords, allow_empty=False, show_progress=False)
+            hits = self.model.retrieve(tokenized_chunk, k=k, n_threads=-1, chunksize=chunk_size, show_progress=False)
             total_time += time.time() - start_time
 
             for batch_i, qid in enumerate(query_ids[i:i + chunk_size]):
                 results[qid] = {doc_ids[index]: float(score) for index, score in zip(hits.documents[batch_i], hits.scores[batch_i])}
 
+        self.result_tracker['queries_count'] = len(queries)
+        self.result_tracker['retrieval_total_time'] = total_time
         logging.info(f"Total retrieving time for {len(queries)} queries: {total_time} seconds")
         return results
-
-    # def scoring_method(self, queries, doc_ids, k):
-    #     results = {}
-    #     total_time = 0.0
-    #
-    #     for qid, query in queries.items():
-    #         start_time = time.time()
-    #         tokenized_query = bm25s.tokenize(query, stemmer=self.stemming)
-    #         hits = self.model.retrieve(tokenized_query, k=k)
-    #         total_time += time.time() - start_time
-    #
-    #         results[qid] = {doc_ids[index]: float(score) for index, score in zip(hits.documents[0], hits.scores[0])}
-    #
-    #     logging.info(f"Total retrieving time for {len(queries)} queries: {total_time} seconds")
-    #     return results
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

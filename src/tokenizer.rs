@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use regex::Regex;
-use stop_words::{get, LANGUAGE::English};
+use stopwords::{NLTK, Language, Stopwords};
 use rust_stemmers::{Algorithm, Stemmer};
 
 pub type Corpus = Vec<Vec<usize>>;
@@ -19,7 +19,11 @@ pub struct Tokenizer {
 
 impl Tokenizer {
     pub fn new() -> Tokenizer {
-        let stop_words: HashSet<_> = get(English).into_iter().collect();
+        let stop_words: HashSet<_> = NLTK::stopwords(Language::English)
+            .unwrap()
+            .into_iter()
+            .map(|&s| s.to_string())
+            .collect();
 
         Self {
             word_pattern: Regex::new(r"(?u)\b\w\w+\b").unwrap(),

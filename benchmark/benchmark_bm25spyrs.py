@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 class BenchmarkBm25Spyrs(Benchmark):
     def __init__(self, dataset):
         super(BenchmarkBm25Spyrs, self).__init__(dataset)
+        self.result_tracker['model_name'] = 'bm25spyrs'
         self.model = bm25spyrs.Retriever(1.5, 0.75)
 
     def indexing_method(self, texts):
@@ -39,21 +40,10 @@ class BenchmarkBm25Spyrs(Benchmark):
             for batch_i, qid in enumerate(query_ids[i:i + chunk_size]):
                 results[qid] = {doc_ids[index]: score for index, score in hits[batch_i]}
 
+        self.result_tracker['queries_count'] = len(queries)
+        self.result_tracker['retrieval_total_time'] = total_time
         logging.info(f"Total retrieving time for {len(queries)} queries: {total_time} seconds")
         return results
-
-    # def scoring_method(self, queries, doc_ids, k):
-    #     results = {}
-    #     total_time = 0.0
-    #
-    #     for qid, query in queries.items():
-    #         start_time = time.time()
-    #         hits = self.model.top_n(query, k)
-    #         total_time += time.time() - start_time
-    #         results[qid] = {doc_ids[hit[0]]: hit[1] for hit in hits}
-    #
-    #     logging.info(f"Total retrieving time for {len(queries)} queries: {total_time} seconds")
-    #     return results
 
 
 if __name__ == "__main__":

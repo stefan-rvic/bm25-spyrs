@@ -10,6 +10,7 @@ __pycache__/
 
 # benchmark
 beir_datasets
+result*
 
 # Distribution / packaging
 dist/
