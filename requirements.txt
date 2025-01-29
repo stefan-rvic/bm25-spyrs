@@ -1,0 +1,8 @@
+maturin
+psutil
+beir
+numpy
+nltk
+bm25s
+-e .
+
