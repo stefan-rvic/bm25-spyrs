@@ -1,8 +1,8 @@
+import argparse
 import logging
 import time
 
 import bm25spyrs
-import argparse
 
 from benchmark import Benchmark
 
@@ -21,6 +21,11 @@ class BenchmarkBm25Spyrs(Benchmark):
 
     def indexing_method(self, texts):
         self.model.index(texts)
+
+    def compute_mat_size(self):
+        mem = self.model.mat_mem()
+        logger.info(f"sparse matrix size: {mem :.2f} MB")
+        self.result_tracker['matrix_size'] = mem
 
     def scoring_method(self, queries, doc_ids, k):
         results = {}

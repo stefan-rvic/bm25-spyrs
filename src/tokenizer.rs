@@ -1,14 +1,17 @@
 use std::collections::{HashMap, HashSet};
+use pyo3::Bound;
+use pyo3::prelude::*;
+use pyo3::types::{PyList, PyString};
 use regex::Regex;
 use stopwords::{NLTK, Language, Stopwords};
 use rust_stemmers::{Algorithm, Stemmer};
 
-pub type Corpus = Vec<Vec<usize>>;
-pub type Vocab = HashMap<String, usize>;
+pub type Corpus = Vec<Vec<u32>>;
+pub type Vocab = HashMap<String, u32>;
 
 pub struct TokenizeOutput {
-    pub corpus: Vec<Vec<usize>>,
-    pub vocab: HashMap<String, usize>,
+    pub corpus: Corpus,
+    pub vocab: Vocab,
 }
 
 pub struct Tokenizer {
@@ -41,15 +44,18 @@ impl Tokenizer {
             .collect()
     }
 
-    pub fn perform(&self, texts: &[String]) -> TokenizeOutput {
-        let mut vocab = HashMap::new();
-        let mut corpus = Vec::with_capacity(texts.len());
+    pub fn perform<'py>(&self, texts: &Bound<'py, PyList>) -> TokenizeOutput {
+        let mut vocab: Vocab = HashMap::new();
+        let mut corpus: Corpus = Vec::with_capacity(texts.len());
         let mut id = 0;
 
-        for text in texts {
-            let lowercased = text.to_lowercase();
-            let mut doc_tokens = Vec::new();
+        for text in texts.iter() {
+            let lowercased = text
+                .downcast::<PyString>()
+                .map(|item| item.to_str().unwrap().to_lowercase())
+                .unwrap();
 
+            let mut doc_tokens = Vec::new();
             for token in self.word_pattern.find_iter(&lowercased) {
                 let token = token.as_str();
 
@@ -74,9 +80,9 @@ impl Tokenizer {
         let stemmed_terms: Vec<String> = unique_terms.iter().map(|term| self.stemmer.stem(term).to_string()).collect();
         let unique_stemmed_terms: HashSet<_> = stemmed_terms.clone().into_iter().collect();
 
-        let stemmed_vocab: HashMap<String, usize> = unique_stemmed_terms.iter().enumerate().map(|(i, stemmed_term)| (stemmed_term.clone(), i)).collect();
+        let stemmed_vocab: HashMap<String, u32> = unique_stemmed_terms.iter().enumerate().map(|(i, stemmed_term)| (stemmed_term.clone(), i as u32)).collect();
 
-        let vocab_to_stemmed_vocab: HashMap<usize, usize> = unique_terms
+        let vocab_to_stemmed_vocab: HashMap<u32, u32> = unique_terms
             .iter()
             .zip(stemmed_terms.iter())
             .map(|(term, stem)| (*vocab.get(term).unwrap(), *stemmed_vocab.get(stem).unwrap()))
@@ -90,27 +96,5 @@ impl Tokenizer {
 
 
         TokenizeOutput { corpus, vocab: stemmed_vocab }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    // use super::*;
-
-    #[test]
-    fn test_tokenization() {
-        // let texts = vec![
-        //     "sustainable energy development in modern cities".to_string(),
-        //     "renewable energy systems transform cities today".to_string(),
-        //     "sustainable urban development transforms modern infrastructure".to_string(),
-        //     "future cities require sustainable planning approach".to_string(),
-        //     "energy consumption patterns in urban areas".to_string(),
-        // ];
-        //
-        // let tokenizer = Tokenizer::new();
-        // let query = tokenizer.perform_simple(&texts[0]);
-        // let query_1 = tokenizer.perform_simple(&texts[1]);
-        // let output = tokenizer.perform(&texts);
-        // todo : correct tests
     }
 }

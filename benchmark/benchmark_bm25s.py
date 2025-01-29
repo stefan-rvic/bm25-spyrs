@@ -1,9 +1,10 @@
-import logging
-import time
-import bm25s
-
 import argparse
+import logging
+import sys
+import time
 
+import bm25s
+import numpy as np
 from nltk import SnowballStemmer
 from nltk.corpus import stopwords
 
@@ -28,6 +29,18 @@ class BenchmarkBm25s(Benchmark):
     def indexing_method(self, texts):
         corpus_tokens = bm25s.tokenize(texts, stemmer=self.stemming, stopwords=stopwords, allow_empty=False, show_progress=False)
         self.model.index(corpus_tokens, show_progress=False)
+
+    def compute_mat_size(self):
+        scores = self.model.scores
+        data_size = scores["data"].nbytes if isinstance(scores["data"], np.ndarray) else sys.getsizeof(scores["data"])
+        indices_size = scores["indices"].nbytes if isinstance(scores["indices"], np.ndarray) else sys.getsizeof(
+            scores["indices"])
+        indptr_size = scores["indptr"].nbytes if isinstance(scores["indptr"], np.ndarray) else sys.getsizeof(
+            scores["indptr"])
+
+        mem = (data_size + indices_size + indptr_size) / 1024 / 1024
+        logger.info(f"sparse matrix size: {mem :.2f} MB")
+        self.result_tracker['matrix_size'] = mem
 
     def scoring_method(self, queries, doc_ids, k):
         results = {}

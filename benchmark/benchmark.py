@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 class Benchmark:
     def __init__(self, dataset):
+        self.model = None
         data_path = os.path.join("beir_datasets", dataset)
         self.corpus, self.queries, self.qrels = GenericDataLoader(data_path).load(split="test")
         self.doc_ids = list(self.corpus.keys())
@@ -27,18 +28,27 @@ class Benchmark:
         logging.info(f"indexing {self.dataset}")
         texts = [f'{doc["title"]} {doc["text"]}' for doc in self.corpus.values()]
 
-        mem_before = self.check_memory()
+        mem = self._get_mem()
         start_time = time.time()
         self.indexing_method(texts)
         indexing_time = time.time() - start_time
-        used_mem = self.check_memory() - mem_before
+        res_mem = self._get_mem() - mem
+        logger.info(f"indexing memory: {res_mem} MIB")
         del texts
-
-        self.result_tracker['memory'] = used_mem
+        self.result_tracker['approx_mem'] = res_mem
         self.result_tracker['indexing_time'] = indexing_time
-        logging.info(f"Indexing completed in {indexing_time:.2f} seconds using {used_mem:.2f} MB")
+        logging.info(f"Indexing completed in {indexing_time:.2f} seconds")
+
+    def _get_mem(self):
+        import gc
+        gc.collect()
+        process = psutil.Process(os.getpid())
+        return process.memory_info().rss / 1024 ** 2
 
     def indexing_method(self, texts):
+        pass
+
+    def compute_mat_size(self):
         pass
 
     def benchmark_scoring(self):
@@ -53,13 +63,10 @@ class Benchmark:
     def scoring_method(self, queries, doc_ids, k):
         pass
 
-    def check_memory(self):
-        process = psutil.Process(os.getpid())
-        return process.memory_info().rss / 1024 / 1024
-
     def perform(self):
         logging.info("started benchmark")
         self.benchmark_indexing()
+        self.compute_mat_size()
         self.benchmark_scoring()
         self.write_results(f'results_{self.result_tracker["model_name"]}.json')
         logging.info("ended benchmark")
