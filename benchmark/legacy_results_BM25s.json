@@ -1,0 +1,310 @@
+[
+    {
+        "dataset": "arguana",
+        "model_name": "BM25s",
+        "indexing_time": 1.0187292098999023,
+        "matrix_size": 4.745452880859375,
+        "queries_count": 1406,
+        "retrieval_total_time": 1.8367023468017578,
+        "ndcg": {
+            "NDCG@1": 0.25249,
+            "NDCG@10": 0.50178,
+            "NDCG@100": 0.54264
+        },
+        "map": {
+            "MAP@1": 0.25249,
+            "MAP@10": 0.41172,
+            "MAP@100": 0.42143
+        },
+        "recall": {
+            "Recall@1": 0.25249,
+            "Recall@10": 0.79018,
+            "Recall@100": 0.96728
+        },
+        "p": {
+            "P@1": 0.25249,
+            "P@10": 0.07902,
+            "P@100": 0.00967
+        }
+    },
+    {
+        "dataset": "scifact",
+        "model_name": "BM25s",
+        "indexing_time": 0.7932436466217041,
+        "matrix_size": 3.577770233154297,
+        "queries_count": 300,
+        "retrieval_total_time": 0.07807087898254395,
+        "ndcg": {
+            "NDCG@1": 0.55,
+            "NDCG@10": 0.6906,
+            "NDCG@100": 0.70974
+        },
+        "map": {
+            "MAP@1": 0.53194,
+            "MAP@10": 0.64094,
+            "MAP@100": 0.64549
+        },
+        "recall": {
+            "Recall@1": 0.53194,
+            "Recall@10": 0.82867,
+            "Recall@100": 0.91267
+        },
+        "p": {
+            "P@1": 0.55,
+            "P@10": 0.09167,
+            "P@100": 0.01037
+        }
+    },
+    {
+        "dataset": "nfcorpus",
+        "model_name": "BM25s",
+        "indexing_time": 0.5901646614074707,
+        "matrix_size": 2.7051620483398438,
+        "queries_count": 323,
+        "retrieval_total_time": 0.05254697799682617,
+        "ndcg": {
+            "NDCG@1": 0.42415,
+            "NDCG@10": 0.32726,
+            "NDCG@100": 0.27876
+        },
+        "map": {
+            "MAP@1": 0.05639,
+            "MAP@10": 0.12142,
+            "MAP@100": 0.14617
+        },
+        "recall": {
+            "Recall@1": 0.05639,
+            "Recall@10": 0.15284,
+            "Recall@100": 0.25298
+        },
+        "p": {
+            "P@1": 0.43653,
+            "P@10": 0.23963,
+            "P@100": 0.06827
+        }
+    },
+    {
+        "dataset": "quora",
+        "model_name": "BM25s",
+        "indexing_time": 10.625062942504883,
+        "matrix_size": 22.22513198852539,
+        "queries_count": 10000,
+        "retrieval_total_time": 12.559948921203613,
+        "ndcg": {
+            "NDCG@1": 0.6922,
+            "NDCG@10": 0.7812,
+            "NDCG@100": 0.80538
+        },
+        "map": {
+            "MAP@1": 0.60513,
+            "MAP@10": 0.73246,
+            "MAP@100": 0.74064
+        },
+        "recall": {
+            "Recall@1": 0.60513,
+            "Recall@10": 0.87997,
+            "Recall@100": 0.97233
+        },
+        "p": {
+            "P@1": 0.6922,
+            "P@10": 0.1187,
+            "P@100": 0.01439
+        }
+    },
+    {
+        "dataset": "fiqa",
+        "model_name": "BM25s",
+        "indexing_time": 4.538396835327148,
+        "matrix_size": 22.50354766845703,
+        "queries_count": 648,
+        "retrieval_total_time": 0.20615220069885254,
+        "ndcg": {
+            "NDCG@1": 0.22531,
+            "NDCG@10": 0.2506,
+            "NDCG@100": 0.3141
+        },
+        "map": {
+            "MAP@1": 0.11308,
+            "MAP@10": 0.1905,
+            "MAP@100": 0.20467
+        },
+        "recall": {
+            "Recall@1": 0.11308,
+            "Recall@10": 0.31235,
+            "Recall@100": 0.55678
+        },
+        "p": {
+            "P@1": 0.22531,
+            "P@10": 0.07006,
+            "P@100": 0.01324
+        }
+    },
+    {
+        "dataset": "trec-covid",
+        "model_name": "BM25s",
+        "indexing_time": 17.863797664642334,
+        "matrix_size": 90.8241081237793,
+        "queries_count": 50,
+        "retrieval_total_time": 0.06148695945739746,
+        "ndcg": {
+            "NDCG@1": 0.79,
+            "NDCG@10": 0.6599,
+            "NDCG@100": 0.50238
+        },
+        "map": {
+            "MAP@1": 0.00217,
+            "MAP@10": 0.01549,
+            "MAP@100": 0.08973
+        },
+        "recall": {
+            "Recall@1": 0.00217,
+            "Recall@10": 0.01793,
+            "Recall@100": 0.12737
+        },
+        "p": {
+            "P@1": 0.86,
+            "P@10": 0.69,
+            "P@100": 0.5372
+        }
+    },
+    {
+        "dataset": "scidocs",
+        "model_name": "BM25s",
+        "indexing_time": 2.8716747760772705,
+        "matrix_size": 14.590953826904297,
+        "queries_count": 1000,
+        "retrieval_total_time": 0.29363012313842773,
+        "ndcg": {
+            "NDCG@1": 0.185,
+            "NDCG@10": 0.15899,
+            "NDCG@100": 0.22709
+        },
+        "map": {
+            "MAP@1": 0.03763,
+            "MAP@10": 0.09308,
+            "MAP@100": 0.10862
+        },
+        "recall": {
+            "Recall@1": 0.03763,
+            "Recall@10": 0.16608,
+            "Recall@100": 0.36853
+        },
+        "p": {
+            "P@1": 0.185,
+            "P@10": 0.082,
+            "P@100": 0.01815
+        }
+    },
+    {
+        "dataset": "webis-touche2020",
+        "model_name": "BM25s",
+        "indexing_time": 62.41212701797485,
+        "matrix_size": 265.11096954345703,
+        "queries_count": 49,
+        "retrieval_total_time": 0.14184188842773438,
+        "ndcg": {
+            "NDCG@1": 0.40816,
+            "NDCG@10": 0.31961,
+            "NDCG@100": 0.43799
+        },
+        "map": {
+            "MAP@1": 0.02458,
+            "MAP@10": 0.11714,
+            "MAP@100": 0.20007
+        },
+        "recall": {
+            "Recall@1": 0.02458,
+            "Recall@10": 0.19346,
+            "Recall@100": 0.55028
+        },
+        "p": {
+            "P@1": 0.42857,
+            "P@10": 0.29796,
+            "P@100": 0.09184
+        }
+    },
+    {
+        "dataset": "nq",
+        "model_name": "BM25s",
+        "indexing_time": 186.45395612716675,
+        "matrix_size": 792.5939025878906,
+        "queries_count": 3452,
+        "retrieval_total_time": 18.05514645576477,
+        "ndcg": {
+            "NDCG@1": 0.14658,
+            "NDCG@10": 0.28063,
+            "NDCG@100": 0.3462
+        },
+        "map": {
+            "MAP@1": 0.13087,
+            "MAP@10": 0.22229,
+            "MAP@100": 0.23622
+        },
+        "recall": {
+            "Recall@1": 0.13087,
+            "Recall@10": 0.44407,
+            "Recall@100": 0.74059
+        },
+        "p": {
+            "P@1": 0.14658,
+            "P@10": 0.05194,
+            "P@100": 0.00886
+        }
+    },
+    {
+        "dataset": "hotpotqa",
+        "model_name": "BM25s",
+        "indexing_time": 287.5013792514801,
+        "matrix_size": 942.2382850646973,
+        "queries_count": 7405,
+        "retrieval_total_time": 57.74784278869629,
+        "ndcg": {
+            "NDCG@1": 0.66361,
+            "NDCG@10": 0.57201,
+            "NDCG@100": 0.61334
+        },
+        "map": {
+            "MAP@1": 0.3318,
+            "MAP@10": 0.47812,
+            "MAP@100": 0.48947
+        },
+        "recall": {
+            "Recall@1": 0.3318,
+            "Recall@10": 0.60196,
+            "Recall@100": 0.76293
+        },
+        "p": {
+            "P@1": 0.66361,
+            "P@10": 0.12039,
+            "P@100": 0.01526
+        }
+    },
+    {
+        "dataset": "fever",
+        "model_name": "BM25s",
+        "indexing_time": 488.8582730293274,
+        "matrix_size": 1617.6789512634277,
+        "queries_count": 6666,
+        "retrieval_total_time": 52.766693353652954,
+        "ndcg": {
+            "NDCG@1": 0.33093,
+            "NDCG@10": 0.48147,
+            "NDCG@100": 0.52523
+        },
+        "map": {
+            "MAP@1": 0.31203,
+            "MAP@10": 0.41949,
+            "MAP@100": 0.42865
+        },
+        "recall": {
+            "Recall@1": 0.31203,
+            "Recall@10": 0.65431,
+            "Recall@100": 0.85226
+        },
+        "p": {
+            "P@1": 0.33093,
+            "P@10": 0.07138,
+            "P@100": 0.0095
+        }
+    }
+]
