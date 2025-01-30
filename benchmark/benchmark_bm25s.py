@@ -19,12 +19,12 @@ logger = logging.getLogger(__name__)
 stopwords = stopwords.words('english')
 
 class BenchmarkBm25s(Benchmark):
-    def __init__(self, dataset):
+    def __init__(self, dataset, backend):
         super(BenchmarkBm25s, self).__init__(dataset)
         self.result_tracker['model_name'] = 'BM25s'
         stemmer = SnowballStemmer("english")
         self.stemming = lambda texts: [stemmer.stem(text) for text in texts]
-        self.model = bm25s.BM25(method='atire', backend='numpy')
+        self.model = bm25s.BM25(method='atire', backend=backend)
 
     def indexing_method(self, texts):
         corpus_tokens = bm25s.tokenize(texts, stemmer=self.stemming, stopwords=stopwords, allow_empty=False, show_progress=False)
@@ -69,7 +69,9 @@ class BenchmarkBm25s(Benchmark):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=str, required=True, help="Name of the BEIR dataset")
+    parser.add_argument("--backend", type=str, required=True, help="Name of the bm25s backend")
+
     args = parser.parse_args()
 
-    benchmark = BenchmarkBm25s(args.dataset)
+    benchmark = BenchmarkBm25s(args.dataset, args.backend)
     benchmark.perform()

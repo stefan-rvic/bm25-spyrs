@@ -1,12 +1,13 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use sprs::TriMatI;
 use ndarray::{s, Array1, Axis};
-use order_stat::kth_by;
 use pyo3::prelude::*;
 use pyo3::{pyclass, pymethods};
 use pyo3::types::{PyList};
 use rayon::prelude::*;
 use crate::tokenizer::{Corpus, TokenizeOutput, Tokenizer, Vocab};
+use thread_local::ThreadLocal;
 
 type DocFrequencies = HashMap<u32, u32>;
 type TermFrequencies = Vec<(Array1<u32>, Array1<f32>)>;
@@ -39,6 +40,7 @@ pub struct Retriever {
     vocab: Vocab,
     n_docs: usize,
     matrix_components: MatrixComponents,
+    score_buffer: ThreadLocal<RefCell<Vec<f32>>>,
 }
 
 #[pymethods]
@@ -52,6 +54,7 @@ impl Retriever {
             vocab: Default::default(),
             n_docs: 0,
             matrix_components: MatrixComponents {indices:Default::default(), values:Default::default(), indptr:Default::default()},
+            score_buffer: ThreadLocal::default(),
         }
     }
 
@@ -70,7 +73,7 @@ impl Retriever {
         self.internal_top_n(&query, n)
     }
 
-    pub fn top_n_batched(&mut self, queries: Vec<String>, n: usize) -> Vec<SearchResult> {
+    pub fn top_n_batched(&self, queries: Vec<String>, n: usize) -> Vec<SearchResult> {
         queries
             .par_iter()
             .map(|query| self.internal_top_n(&query, n))
@@ -190,42 +193,64 @@ impl Retriever {
     fn internal_top_n(&self, query: &String, n: usize) -> SearchResult {
         let tokenized_query = self.tokenizer.perform_simple(query);
 
-        let query_indices:Vec<usize> = tokenized_query
+        let scores: &mut Vec<f32> = &mut *self.score_buffer.get_or(|| RefCell::new(vec![0.0; self.n_docs])).borrow_mut();
+        scores.fill(0.0);
+
+        let mut query_indices: Vec<usize> = tokenized_query
             .iter()
             .filter_map(|term| self.vocab.get(term).cloned())
             .map(|idx| idx as usize)
             .collect();
+        query_indices.sort_unstable(); // Sort to improve cache access pattern
 
         if query_indices.is_empty() {
             return vec![];
         }
 
-        let mut scores = vec![0.0; self.n_docs];
-
         let raw_indptr = &self.matrix_components.indptr;
-        for &i in &query_indices {
-
+        const CHUNK_SIZE: usize = 4;
+        for &i in query_indices.iter() {
             let start = raw_indptr[i] as usize;
             let end = raw_indptr[i + 1] as usize;
 
-            let doc_indices:&[u32] = &self.matrix_components.indices[start..end];
-            let term_scores:&[f32]  = &self.matrix_components.values[start..end];
+            let doc_indices = &self.matrix_components.indices[start..end];
+            let term_scores = &self.matrix_components.values[start..end];
 
-            for (&doc_idx, &score) in doc_indices.iter().zip(term_scores.iter()) {
-                scores[doc_idx as usize] += score;
+            let chunks = doc_indices.len() / CHUNK_SIZE;
+            let remainder = doc_indices.len() % CHUNK_SIZE;
+
+            for c in 0..chunks {
+                let base = c * CHUNK_SIZE;
+
+                unsafe {
+                    scores[*doc_indices.get_unchecked(base) as usize] += *term_scores.get_unchecked(base);
+                    scores[*doc_indices.get_unchecked(base + 1) as usize] += *term_scores.get_unchecked(base + 1);
+                    scores[*doc_indices.get_unchecked(base + 2) as usize] += *term_scores.get_unchecked(base + 2);
+                    scores[*doc_indices.get_unchecked(base + 3) as usize] += *term_scores.get_unchecked(base + 3);
+                }
+            }
+
+            let start_remainder = chunks * CHUNK_SIZE;
+            for i in 0..remainder {
+                scores[doc_indices[start_remainder + i] as usize] += term_scores[start_remainder + i];
             }
         }
 
-        let mut indexed_scores: Vec<(usize, f32)> = scores.into_iter()
-            .enumerate()
-            .collect();
+        let mut indexed_scores = Vec::with_capacity(n);
 
+        for (idx, &score) in scores.iter().enumerate() {
+            if indexed_scores.len() < n {
+                indexed_scores.push((idx, score));
+                if indexed_scores.len() == n {
+                    indexed_scores.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                }
+            } else if score > indexed_scores.last().unwrap().1 {
+                indexed_scores.pop();
+                let pos = indexed_scores.partition_point(|x| x.1 > score);
+                indexed_scores.insert(pos, (idx, score));
+            }
+        }
 
-        let k = n.min(self.n_docs);
-        kth_by(&mut indexed_scores, k - 1, |a, b| {
-            b.1.partial_cmp(&a.1).unwrap()
-        });
-
-        indexed_scores[..k].to_vec()
+        indexed_scores
     }
 }

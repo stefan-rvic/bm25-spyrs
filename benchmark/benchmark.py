@@ -3,7 +3,6 @@ import logging
 import os
 import time
 
-import psutil
 from beir.datasets.data_loader import GenericDataLoader
 from beir.retrieval.evaluation import EvaluateRetrieval
 
@@ -28,22 +27,13 @@ class Benchmark:
         logging.info(f"indexing {self.dataset}")
         texts = [f'{doc["title"]} {doc["text"]}' for doc in self.corpus.values()]
 
-        mem = self._get_mem()
         start_time = time.time()
         self.indexing_method(texts)
         indexing_time = time.time() - start_time
-        res_mem = self._get_mem() - mem
-        logger.info(f"indexing memory: {res_mem} MIB")
         del texts
-        self.result_tracker['approx_mem'] = res_mem
+
         self.result_tracker['indexing_time'] = indexing_time
         logging.info(f"Indexing completed in {indexing_time:.2f} seconds")
-
-    def _get_mem(self):
-        import gc
-        gc.collect()
-        process = psutil.Process(os.getpid())
-        return process.memory_info().rss / 1024 ** 2
 
     def indexing_method(self, texts):
         pass

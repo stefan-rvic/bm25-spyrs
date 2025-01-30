@@ -1,5 +1,4 @@
 maturin
-psutil
 beir
 numpy
 nltk
