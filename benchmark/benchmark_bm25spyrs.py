@@ -12,6 +12,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+tokenizer = bm25spyrs.Tokenizer()
 
 class BenchmarkBm25Spyrs(Benchmark):
     def __init__(self, dataset):
@@ -19,8 +20,11 @@ class BenchmarkBm25Spyrs(Benchmark):
         self.result_tracker['model_name'] = 'bm25spyrs'
         self.model = bm25spyrs.Retriever(1.5, 0.75)
 
-    def indexing_method(self, texts):
-        self.model.index(texts)
+    def tokenize_corpus(self, texts):
+        return tokenizer.perform(texts)
+
+    def indexing_method(self, tokenized_texts):
+        self.model.index(tokenized_texts)
 
     def compute_mat_size(self):
         mem = self.model.mat_mem()
@@ -38,8 +42,9 @@ class BenchmarkBm25Spyrs(Benchmark):
 
         for i in range(0, len(queries), chunk_size):
             batch_queries = queries[i:i + chunk_size]
+            tokenized_chunk = [tokenizer.perform_simple(query) for query in batch_queries]
             start_time = time.time()
-            hits = self.model.top_n_batched(batch_queries, k)
+            hits = self.model.top_n_batched(tokenized_chunk, k)
             total_time += time.time() - start_time
 
             for batch_i, qid in enumerate(query_ids[i:i + chunk_size]):

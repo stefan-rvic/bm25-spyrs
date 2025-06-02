@@ -58,8 +58,9 @@ impl Retriever {
         }
     }
 
-    pub fn index<'py>(&mut self, texts: &Bound<'py, PyList>) {
-        self.internal_index(texts);
+    pub fn index<'py>(&mut self, texts: &Bound<'py, PyAny>) {
+        let tokenized_texts: TokenizeOutput = texts.extract().unwrap();
+        self.internal_index(&tokenized_texts);
     }
 
     pub fn mat_mem(&self) -> f64 {
@@ -69,12 +70,14 @@ impl Retriever {
         (indices_mem + values_mem + indptr_mem) as f64 /  1024.0 / 1024.0
     }
 
-    pub fn top_n(&self, query: String, n: usize) -> SearchResult {
-        self.internal_top_n(&query, n)
+    pub fn top_n<'py>(&self, tokens: &Bound<'py, PyList>, n: usize) -> SearchResult {
+        self.internal_top_n(&tokens.extract().unwrap(), n)
     }
 
-    pub fn top_n_batched(&self, queries: Vec<String>, n: usize) -> Vec<SearchResult> {
-        queries
+    pub fn top_n_batched<'py>(&self, queries: &Bound<'py, PyList>, n: usize) -> Vec<SearchResult> {
+        let tokenized_queries: Vec<Vec<String>> = queries.extract().unwrap();
+
+        tokenized_queries
             .par_iter()
             .map(|query| self.internal_top_n(&query, n))
             .collect()
@@ -82,13 +85,12 @@ impl Retriever {
 }
 
 impl Retriever {
-    fn internal_index<'py>(&mut self, texts: &Bound<'py, PyList>) {
-        let TokenizeOutput {corpus, vocab} =  self.tokenizer.perform(texts);
-        self.vocab = vocab;
+    fn internal_index<'py>(&mut self, tokenized_texts: &TokenizeOutput) {
+        self.vocab = tokenized_texts.vocab.clone();
 
-        let Frequencies { doc_frequencies, term_frequencies } = Retriever::compute_frequencies(&corpus);
+        let Frequencies { doc_frequencies, term_frequencies } = Retriever::compute_frequencies(&tokenized_texts.corpus);
 
-        let doc_lengths: Vec<f32> = corpus.iter().map(|doc| doc.len() as f32).collect();
+        let doc_lengths: Vec<f32> = tokenized_texts.corpus.iter().map(|doc| doc.len() as f32).collect();
         let avg_doc_len = doc_lengths.iter().sum::<f32>() / (doc_lengths.len() as f32);
 
         self.n_docs = doc_lengths.len();
@@ -190,9 +192,7 @@ impl Retriever {
         MatrixParams { rows, cols, scores}
     }
 
-    fn internal_top_n(&self, query: &String, n: usize) -> SearchResult {
-        let tokenized_query = self.tokenizer.perform_simple(query);
-
+    fn internal_top_n(&self, tokenized_query: &Vec<String>, n: usize) -> SearchResult {
         let scores: &mut Vec<f32> = &mut *self.score_buffer.get_or(|| RefCell::new(vec![0.0; self.n_docs])).borrow_mut();
         scores.fill(0.0);
 

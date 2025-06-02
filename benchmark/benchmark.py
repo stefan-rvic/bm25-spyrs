@@ -27,15 +27,19 @@ class Benchmark:
         logging.info(f"indexing {self.dataset}")
         texts = [f'{doc["title"]} {doc["text"]}' for doc in self.corpus.values()]
 
+        tokenized_texts = self.tokenize_corpus(texts)
         start_time = time.time()
-        self.indexing_method(texts)
+        self.indexing_method(tokenized_texts)
         indexing_time = time.time() - start_time
         del texts
 
         self.result_tracker['indexing_time'] = indexing_time
         logging.info(f"Indexing completed in {indexing_time:.2f} seconds")
 
-    def indexing_method(self, texts):
+    def tokenize_corpus(self, texts):
+        pass
+
+    def indexing_method(self, tokenized_texts):
         pass
 
     def compute_mat_size(self):

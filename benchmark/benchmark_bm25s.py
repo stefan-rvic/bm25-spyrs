@@ -26,9 +26,11 @@ class BenchmarkBm25s(Benchmark):
         self.stemming = lambda texts: [stemmer.stem(text) for text in texts]
         self.model = bm25s.BM25(method='atire', backend=backend)
 
-    def indexing_method(self, texts):
-        corpus_tokens = bm25s.tokenize(texts, stemmer=self.stemming, stopwords=stopwords, allow_empty=False, show_progress=False)
-        self.model.index(corpus_tokens, show_progress=False)
+    def tokenize_corpus(self, texts):
+        return bm25s.tokenize(texts, stemmer=self.stemming, stopwords=stopwords, allow_empty=False, show_progress=False)
+
+    def indexing_method(self, tokenized_texts):
+        self.model.index(tokenized_texts, show_progress=False)
 
     def compute_mat_size(self):
         scores = self.model.scores
@@ -52,9 +54,9 @@ class BenchmarkBm25s(Benchmark):
         total_time = 0.0
         for i in range(0, len(queries), chunk_size):
             batch_queries = queries[i:i + chunk_size]
+            tokenized_chunk = bm25s.tokenize(batch_queries, stemmer=self.stemming, stopwords=stopwords, allow_empty=False, show_progress=False)
 
             start_time = time.time()
-            tokenized_chunk = bm25s.tokenize(batch_queries, stemmer=self.stemming, stopwords=stopwords, allow_empty=False, show_progress=False)
             hits = self.model.retrieve(tokenized_chunk, k=k, n_threads=-1, chunksize=chunk_size, show_progress=False)
             total_time += time.time() - start_time
 

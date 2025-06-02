@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use pyo3::Bound;
 use pyo3::prelude::*;
-use pyo3::types::{PyList, PyString};
+use pyo3::types::{PyDict, PyList, PyString};
 use regex::Regex;
 use stopwords::{NLTK, Language, Stopwords};
 use rust_stemmers::{Algorithm, Stemmer};
@@ -9,18 +9,40 @@ use rust_stemmers::{Algorithm, Stemmer};
 pub type Corpus = Vec<Vec<u32>>;
 pub type Vocab = HashMap<String, u32>;
 
+#[derive(IntoPyObject, IntoPyObjectRef)]
 pub struct TokenizeOutput {
     pub corpus: Corpus,
     pub vocab: Vocab,
 }
 
+impl<'py> FromPyObject<'py> for TokenizeOutput {
+    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+        if let Ok(dict) = ob.downcast::<PyDict>() {
+            let corpus: Corpus = dict.get_item("corpus")?.unwrap().extract()?;
+            let vocab: Vocab = dict.get_item("vocab")?.unwrap().extract()?;
+
+            Ok(TokenizeOutput { corpus, vocab })
+        } else {
+            let corpus: Corpus = ob.getattr("corpus")?.extract()?;
+            let vocab: Vocab = ob.getattr("vocab")?.extract()?;
+
+            Ok(TokenizeOutput { corpus, vocab })
+        }
+    }
+}
+
+
+#[pyclass]
 pub struct Tokenizer {
     word_pattern: Regex,
     stop_words: HashSet<String>,
     stemmer: Stemmer,
 }
 
+#[pymethods]
 impl Tokenizer {
+
+    #[new]
     pub fn new() -> Tokenizer {
         let stop_words: HashSet<_> = NLTK::stopwords(Language::English)
             .unwrap()
@@ -35,9 +57,9 @@ impl Tokenizer {
         }
     }
 
-    pub fn perform_simple(&self, text: &String) -> Vec<String> {
+    pub fn perform_simple<'py>(&self, text: &Bound<'py, PyString>) -> Vec<String> {
         self.word_pattern
-            .find_iter(&text.to_lowercase())
+            .find_iter(text.to_string().to_lowercase().as_str())
             .map(|token| token.as_str())
             .filter(|token| !self.stop_words.contains(*token))
             .map(|token| self.stemmer.stem(token).to_string())

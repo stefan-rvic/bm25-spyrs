@@ -1,7 +1,0 @@
-maturin
-beir
-numpy
-nltk
-bm25s
--e .
-
